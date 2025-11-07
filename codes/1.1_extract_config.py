@@ -63,4 +63,22 @@ with open(f"{artifact_output_dir}/1.2_arch_design.txt", "w", encoding="utf-8") a
 with open(f"{artifact_output_dir}/1.3_logic_design.txt", "w", encoding="utf-8") as f:
     f.write(formatted_logic_design)
 
-shutil.copy(f"{output_dir}/planning_config.yaml", f"{artifact_output_dir}/1.4_config.yaml")
+# ...existing code...
+config_src = os.path.join(output_dir, "planning_config.yaml")
+config_dst = os.path.join(artifact_output_dir, "1.4_config.yaml")
+
+try:
+    # ensure destination directory exists (optional)
+    os.makedirs(os.path.dirname(config_dst), exist_ok=True)
+
+    shutil.copy(config_src, config_dst)
+except FileNotFoundError:
+    print(f"No planning_config.yaml found at {config_src}; skipping copy.")
+    # Optionally create an empty placeholder:
+    # with open(config_dst, "w", encoding="utf8") as f:
+    #     f.write("")
+except PermissionError as e:
+    print(f"Permission error copying {config_src} to {config_dst}: {e}")
+except Exception as e:
+    print(f"Unexpected error copying {config_src} to {config_dst}: {e}")
+
