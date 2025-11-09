@@ -9,7 +9,7 @@ import glob
 
 
 # Initialize Weave project - read project name from environment with a sensible default
-weave.init(project_name=os.environ.get("WEAVE_PROJECT_NAME")
+weave.init(project_name=os.environ.get("WEAVE_PROJECT_NAME"))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
