@@ -408,14 +408,24 @@ def save_input_variable(output_dir: str, var_name: str, var_value: any):
             json.dump(str(var_value), f, indent=4)
 
 
-def save_artifacts(output_dir, trajectories, responses):
+def save_artifacts(output_dir, trajectories, responses, todo_file_name=None, stage="planning"):
     """Save final planning-stage outputs for reproducibility."""
-    os.makedirs(output_dir, exist_ok=True)
-    with open(f"{output_dir}/planning_trajectories.json", "w") as f:
-        json.dump(trajectories, f, indent=2)
-    with open(f"{output_dir}/planning_response.json", "w") as f:
-        json.dump(responses, f, indent=2)
-    print(f"✅ Saved artifacts to {output_dir}")
+    if stage == "planning":
+        os.makedirs(output_dir, exist_ok=True)
+        with open(f"{output_dir}/planning_trajectories.json", "w") as f:
+            json.dump(trajectories, f, indent=2)
+        with open(f"{output_dir}/planning_response.json", "w") as f:
+            json.dump(responses, f, indent=2)
+        print(f"✅ Saved artifacts to {output_dir}")
+    elif stage == "analyzing":
+        os.makedirs(output_dir, exist_ok=True)
+        with open(f"{output_dir}/{todo_file_name}_simple_analysis_trajectories.json", "w") as f:
+            json.dump(trajectories, f, indent=2)
+        with open(f"{output_dir}/{todo_file_name}_simple_analysis_response.jsonn", "w") as f:
+            json.dump(responses, f, indent=2)
+        print(f"✅ Saved artifacts to {output_dir}")
+
+    
 
 def restore_artifacts_planning(output_dir, resume_stage_index):
     """Restore trajectories and responses from previous planning stage."""
