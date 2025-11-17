@@ -1,0 +1,47 @@
+model_list:
+# Ollama local models
+  - model_name: "DeepSeek-R1-0528-Qwen3-8B-GGUF-Q8_K_XL_local"             
+    litellm_params:
+      model: "ollama/DeepSeek-R1-0528-Qwen3-8B-GGUF-Q8_K_XL"
+      api_base: "http://localhost:11434"
+      api_key: ollama
+      num_ctx: 130000
+
+  # Cerebras Account 1
+  - model_name: o3-mini
+    litellm_params:
+      model: cerebras/gpt-oss-120b
+      api_key: os.environ/CEREBRAS_API_KEY
+  - model_name: qwen-3-235b-a22b-thinking-2507
+    litellm_params:
+      model: cerebras/qwen-3-235b-a22b-thinking-2507
+      api_key: os.environ/CEREBRAS_API_KEY
+  - model_name: qwen-3-235b-a22b-instruct-2507
+    litellm_params:
+      model: cerebras/qwen-3-235b-a22b-instruct-2507
+      api_key: os.environ/CEREBRAS_API_KEY
+      
+  # Cerebras Account 2
+  - model_name: o3-mini
+    litellm_params:
+      model: cerebras/gpt-oss-120b
+      api_key: os.environ/CEREBRAS_API_KEY_153
+  - model_name: qwen-3-235b-a22b-thinking-2507_153
+    litellm_params:
+      model: cerebras/qwen-3-235b-a22b-thinking-2507
+      api_key: os.environ/CEREBRAS_API_KEY_153
+  - model_name: qwen-3-235b-a22b-instruct-2507_153
+    litellm_params:
+      model: cerebras/qwen-3-235b-a22b-instruct-2507
+      api_key: os.environ/CEREBRAS_API_KEY_153
+      
+litellm_settings:
+  num_retries: 3
+  request_timeout: 6000
+  allowed_fails: 1
+  cooldown_time: 30
+  drop_params: true
+  
+general_settings:
+  port: 4000
+  cache: false 
