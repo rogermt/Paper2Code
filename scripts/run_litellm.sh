@@ -6,8 +6,8 @@ WORKING_DIR="/kaggle/working"
 PAPER_NAME="NSGF"
 GPT_VERSION="DeepSeek-R1-0528-Qwen3-8B-GGUF-Q8_K_XL_local"
 
-WANDB_PROJECT_NAME = "nsgf-paper2code-playground"
-WEAVE_PROJECT_NAME = "nsgf-paper2code-playground"
+WANDB_PROJECT_NAME="nsgf-paper2code-playground"
+WEAVE_PROJECT_NAME="nsgf-paper2code-playground"
 
 PDF_PATH="${WORKING_DIR}/${PAPER_NAME}.pdf"
 PDF_JSON_PATH="${WORKING_DIR}/output/${PAPER_NAME}.json" 
