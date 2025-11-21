@@ -951,7 +951,7 @@ def run_single_generation(
     
     return result
 
-def run_evaluation_suite(
+def process_evaluation_stage(
     config: EvaluationConfig,
     paper: str,
     code_files: Dict[str, str],
@@ -1106,7 +1106,7 @@ def main(config: EvaluationConfig):
     
     print(f"[INFO] Loaded {len(code_files)} target code files")
     
-    results = run_evaluation_suite(config, paper, code_files, gold_code_string, tracker)
+    results = process_evaluation_stage(config, paper, code_files, gold_code_string, tracker)
     
     finalize_report(config, results, tracker)
     
@@ -1135,6 +1135,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_workers", type=int, default=3)
     parser.add_argument("--max_retries", type=int, default=3)
     parser.add_argument("--retry_delay", type=float, default=1.0)
+    
     parser.add_argument("--cache_dir", default="/kaggle/working")
     parser.add_argument("--strict_original", action="store_true")
     parser.add_argument("--critiques_per_chunk", type=int, default=5)

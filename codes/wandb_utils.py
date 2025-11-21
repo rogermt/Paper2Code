@@ -8,8 +8,7 @@ import logging
 import glob
 
 
-# Initialize Weave project - read project name from environment with a sensible default
-weave.init(project_name=os.environ.get("WEAVE_PROJECT_NAME"))
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,9 +27,12 @@ def initialize_wandb_run(
 
     wandb.init(project=project, entity=entity, resume=resume, id=id,  settings=wandb.Settings(init_timeout=300))
     wandb.config.update({"stage": stage}, allow_val_change=True)  # Set stage at the start
+
+    # Initialize Weave project - read project name from environment with a sensible default
+    weave.init(project_name=os.environ.get("WEAVE_PROJECT_NAME"))
+
     logger.info(f"W&B run initialized with ID: {wandb.run.id}")
     return wandb.run.id
-
 
 def _prepare_artifact_metadata_and_aliases(output_dir, artifact_type, step, is_resumed, stage, phase):
     timestamp = datetime.now().isoformat()
