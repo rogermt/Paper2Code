@@ -18,9 +18,11 @@ with open(f'{output_dir}/planning_trajectories.json', encoding='utf8') as f:
     traj = json.load(f)
 
 yaml_raw_content = ""
+YAML_EXTRACTION_TURN_INDEX = 10
 for turn_idx, turn in enumerate(traj):
-        if turn_idx == 8:
-            yaml_raw_content = turn['content']   
+        if turn_idx == YAML_EXTRACTION_TURN_INDEX:
+            yaml_raw_content = turn['content'] 
+       
 
 if "</think>" in yaml_raw_content:
     yaml_raw_content = yaml_raw_content.split("</think>")[-1]
@@ -39,8 +41,6 @@ else:
             f.write(yaml_content)
     else:
         print("No YAML content found.")
-
-# ---------------------------------------
 
 artifact_output_dir=f"{output_dir}/planning_artifacts"
 
@@ -63,4 +63,17 @@ with open(f"{artifact_output_dir}/1.2_arch_design.txt", "w", encoding="utf-8") a
 with open(f"{artifact_output_dir}/1.3_logic_design.txt", "w", encoding="utf-8") as f:
     f.write(formatted_logic_design)
 
-shutil.copy(f"{output_dir}/planning_config.yaml", f"{artifact_output_dir}/1.4_config.yaml")
+config_src = os.path.join(output_dir, "planning_config.yaml")
+config_dst = os.path.join(artifact_output_dir, "1.4_config.yaml")
+
+try:
+    # ensure destination directory exists (optional)
+    os.makedirs(os.path.dirname(config_dst), exist_ok=True)
+
+    shutil.copy(config_src, config_dst)
+except FileNotFoundError:
+    print(f"No planning_config.yaml found at {config_src}; skipping copy.")
+except PermissionError as e:
+    print(f"Permission error copying {config_src} to {config_dst}: {e}")
+except Exception as e:
+    print(f"Unexpected error copying {config_src} to {config_dst}: {e}")

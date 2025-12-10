@@ -2,6 +2,10 @@ import json
 import re
 import os
 from datetime import datetime
+import logging
+import subprocess
+
+logger = logging.getLogger(__name__)  # Define logger
 
 def extract_planning(trajectories_json_file_path):
     with open(trajectories_json_file_path) as f:
@@ -17,7 +21,7 @@ def extract_planning(trajectories_json_file_path):
             context_lst.append(content)
 
 
-    context_lst = context_lst[:3] 
+    context_lst = context_lst[:3]
 
     return context_lst
 
@@ -40,8 +44,8 @@ def content_to_json(data):
     except json.JSONDecodeError as e:
         # print(e)
         return content_to_json2(data)
-        
-    
+
+
 def content_to_json2(data):
     # remove [CONTENT][/CONTENT]
     clean_data = re.sub(r'\[CONTENT\]|\[/CONTENT\]', '', data).strip()
@@ -62,7 +66,7 @@ def content_to_json2(data):
     try:
         json_data = json.loads(clean_data)
         return json_data
-    
+
     except json.JSONDecodeError as e:
         # print("Json parsing error", e)
         return content_to_json3(data)
@@ -80,23 +84,23 @@ def content_to_json3(data):
     # remove ("~~~~",] -> "~~~~"])
     clean_data = re.sub(r',\s*\]', ']', clean_data)
 
-    clean_data = re.sub(r'\n\s*', '', clean_data) 
+    clean_data = re.sub(r'\n\s*', '', clean_data)
     clean_data = re.sub(r'"""', '"', clean_data)  # Replace triple double quotes
     clean_data = re.sub(r"'''", "'", clean_data)  # Replace triple single quotes
-    clean_data = re.sub(r"\\", "'", clean_data)  # Replace \ 
+    clean_data = re.sub(r"\\", "'", clean_data)  # Replace \
 
     # JSON parsing
     try:
         json_data = json.loads(f"""{clean_data}""")
         return json_data
-    
+
     except json.JSONDecodeError as e:
         # print(e)
-        
+
         # print(f"[DEBUG] utils.py > content_to_json3 ")
-        # return None 
+        # return None
         return content_to_json4(data)
-    
+
 def content_to_json4(data):
     # 1. Extract Logic Analysis, Task list
     pattern = r'"Logic Analysis":\s*(\[[\s\S]*?\])\s*,\s*"Task list":\s*(\[[\s\S]*?\])'
@@ -123,7 +127,7 @@ def extract_code_from_content(content):
         return ""
     else:
         return code[0]
-    
+
 def extract_code_from_content2(content):
     pattern = r'```python\s*(.*?)```'
     result = re.search(pattern, content, re.DOTALL)
@@ -149,120 +153,65 @@ def format_json_data(data):
     return formatted_text
 
 
-def cal_cost(response_json, model_name):
-    model_cost = {
-        # gpt-4.1
-        "gpt-4.1": {"input": 2.00, "cached_input": 0.50, "output": 8.00},
-        "gpt-4.1-2025-04-14": {"input": 2.00, "cached_input": 0.50, "output": 8.00},
 
-        # gpt-4.1-mini
-        "gpt-4.1-mini": {"input": 0.40, "cached_input": 0.10, "output": 1.60},
-        "gpt-4.1-mini-2025-04-14": {"input": 0.40, "cached_input": 0.10, "output": 1.60},
+def cal_cost(completion_json, gpt_version):
+    """
+    Calculate the cost based on the completion JSON and model version.
+    """
+    if completion_json is None or not hasattr(completion_json, 'usage'):
+        logger.warning("Completion JSON or usage data is missing. Returning default usage info.")
+        return {
+            'model_name': gpt_version,
+            'actual_input_tokens': 0,
+            'cached_tokens': 0,
+            'cached_input_cost': 0.0,
+            'output_tokens': 0,
+            'input_cost': 0.0,
+            'output_cost': 0.0,
+            'total_cost': 0.0
+        }
 
-        # gpt-4.1-nano
-        "gpt-4.1-nano": {"input": 0.10, "cached_input": 0.025, "output": 0.40},
-        "gpt-4.1-nano-2025-04-14": {"input": 0.10, "cached_input": 0.025, "output": 0.40},
+    response_json = completion_json
+    usage_info = response_json.usage
 
-        # gpt-4.5-preview
-        "gpt-4.5-preview": {"input": 75.00, "cached_input": 37.50, "output": 150.00},
-        "gpt-4.5-preview-2025-02-27": {"input": 75.00, "cached_input": 37.50, "output": 150.00},
+    # Use API schema fields
+    total_input_tokens = getattr(usage_info, 'input_tokens', 0)
+    total_output_tokens = getattr(usage_info, 'output_tokens', 0)
+    cached_tokens = getattr(usage_info, 'input_cached_tokens', 0)
+    actual_input_tokens = total_input_tokens - cached_tokens if total_input_tokens > cached_tokens else total_input_tokens
+    input_audio_tokens = getattr(usage_info, 'input_audio_tokens', 0)
+    output_audio_tokens = getattr(usage_info, 'output_audio_tokens', 0)
 
-        # gpt-4o
-        "gpt-4o": {"input": 2.50, "cached_input": 1.25, "output": 10.00},
-        "gpt-4o-2024-08-06": {"input": 2.50, "cached_input": 1.25, "output": 10.00},
-        "gpt-4o-2024-11-20": {"input": 2.50, "cached_input": 1.25, "output": 10.00},
-        "gpt-4o-2024-05-13": {"input": 5.00, "cached_input": None, "output": 15.00},
+    # Cost calculation (example rates, adjust based on Groq pricing)
+    input_cost_per_token = 0.0000005  # Adjust based on gpt-oss-120b pricing
+    output_cost_per_token = 0.0000015  # Adjust based on gpt-oss-120b pricing
+    cached_input_cost_per_token = 0.0000001  # Hypothetical cached rate
+    audio_input_cost_per_token = 0.0000002  # Hypothetical audio rate
+    audio_output_cost_per_token = 0.0000003  # Hypothetical audio rate
 
-        # gpt-4o-audio-preview
-        "gpt-4o-audio-preview": {"input": 2.50, "cached_input": None, "output": 10.00},
-        "gpt-4o-audio-preview-2024-12-17": {"input": 2.50, "cached_input": None, "output": 10.00},
-        "gpt-4o-audio-preview-2024-10-01": {"input": 2.50, "cached_input": None, "output": 10.00},
-
-        # gpt-4o-realtime-preview
-        "gpt-4o-realtime-preview": {"input": 5.00, "cached_input": 2.50, "output": 20.00},
-        "gpt-4o-realtime-preview-2024-12-17": {"input": 5.00, "cached_input": 2.50, "output": 20.00},
-        "gpt-4o-realtime-preview-2024-10-01": {"input": 5.00, "cached_input": 2.50, "output": 20.00},
-
-        # gpt-4o-mini
-        "gpt-4o-mini": {"input": 0.15, "cached_input": 0.075, "output": 0.60},
-        "gpt-4o-mini-2024-07-18": {"input": 0.15, "cached_input": 0.075, "output": 0.60},
-
-        # gpt-4o-mini-audio-preview
-        "gpt-4o-mini-audio-preview": {"input": 0.15, "cached_input": None, "output": 0.60},
-        "gpt-4o-mini-audio-preview-2024-12-17": {"input": 0.15, "cached_input": None, "output": 0.60},
-
-        # gpt-4o-mini-realtime-preview
-        "gpt-4o-mini-realtime-preview": {"input": 0.60, "cached_input": 0.30, "output": 2.40},
-        "gpt-4o-mini-realtime-preview-2024-12-17": {"input": 0.60, "cached_input": 0.30, "output": 2.40},
-
-        # o1
-        "o1": {"input": 15.00, "cached_input": 7.50, "output": 60.00},
-        "o1-2024-12-17": {"input": 15.00, "cached_input": 7.50, "output": 60.00},
-        "o1-preview-2024-09-12": {"input": 15.00, "cached_input": 7.50, "output": 60.00},
-
-        # o1-pro
-        "o1-pro": {"input": 150.00, "cached_input": None, "output": 600.00},
-        "o1-pro-2025-03-19": {"input": 150.00, "cached_input": None, "output": 600.00},
-
-        # o3
-        "o3": {"input": 10.00, "cached_input": 2.50, "output": 40.00},
-        "o3-2025-04-16": {"input": 10.00, "cached_input": 2.50, "output": 40.00},
-
-        # o4-mini
-        "o4-mini": {"input": 1.10, "cached_input": 0.275, "output": 4.40},
-        "o4-mini-2025-04-16": {"input": 1.10, "cached_input": 0.275, "output": 4.40},
-
-        # o3-mini
-        "o3-mini": {"input": 1.10, "cached_input": 0.55, "output": 4.40},
-        "o3-mini-2025-01-31": {"input": 1.10, "cached_input": 0.55, "output": 4.40},
-
-        # o1-mini
-        "o1-mini": {"input": 1.10, "cached_input": 0.55, "output": 4.40},
-        "o1-mini-2024-09-12": {"input": 1.10, "cached_input": 0.55, "output": 4.40},
-
-        # gpt-4o-mini-search-preview
-        "gpt-4o-mini-search-preview": {"input": 0.15, "cached_input": None, "output": 0.60},
-        "gpt-4o-mini-search-preview-2025-03-11": {"input": 0.15, "cached_input": None, "output": 0.60},
-
-        # gpt-4o-search-preview
-        "gpt-4o-search-preview": {"input": 2.50, "cached_input": None, "output": 10.00},
-        "gpt-4o-search-preview-2025-03-11": {"input": 2.50, "cached_input": None, "output": 10.00},
-
-        # computer-use-preview
-        "computer-use-preview": {"input": 3.00, "cached_input": None, "output": 12.00},
-        "computer-use-preview-2025-03-11": {"input": 3.00, "cached_input": None, "output": 12.00},
-
-        # gpt-image-1
-        "gpt-image-1": {"input": 5.00, "cached_input": None, "output": None},
-    }
-
-    
-    prompt_tokens = response_json["usage"]["prompt_tokens"]
-    completion_tokens = response_json["usage"]["completion_tokens"]
-    cached_tokens = response_json["usage"]["prompt_tokens_details"].get("cached_tokens", 0)
-
-    # input token = (prompt_tokens - cached_tokens)
-    actual_input_tokens = prompt_tokens - cached_tokens
-    output_tokens = completion_tokens
-
-    cost_info = model_cost[model_name]
-
-    input_cost = (actual_input_tokens / 1_000_000) * cost_info['input']
-    cached_input_cost = (cached_tokens / 1_000_000) * cost_info['cached_input']
-    output_cost = (output_tokens / 1_000_000) * cost_info['output']
-
-    total_cost = input_cost + cached_input_cost + output_cost
+    input_cost = actual_input_tokens * input_cost_per_token
+    cached_input_cost = cached_tokens * cached_input_cost_per_token
+    output_cost = total_output_tokens * output_cost_per_token
+    audio_input_cost = input_audio_tokens * audio_input_cost_per_token
+    audio_output_cost = output_audio_tokens * audio_output_cost_per_token
+    total_cost = input_cost + cached_input_cost + output_cost + audio_input_cost + audio_output_cost
 
     return {
-        'model_name': model_name,
+        'model_name': gpt_version,
         'actual_input_tokens': actual_input_tokens,
-        'input_cost': input_cost,
         'cached_tokens': cached_tokens,
         'cached_input_cost': cached_input_cost,
-        'output_tokens': output_tokens,
+        'output_tokens': total_output_tokens,
+        'input_cost': input_cost,
         'output_cost': output_cost,
         'total_cost': total_cost,
+        'audio_input_tokens': input_audio_tokens,
+        'audio_output_tokens': output_audio_tokens,
+        'audio_input_cost': audio_input_cost,
+        'audio_output_cost': audio_output_cost
     }
+
+
 
 def load_accumulated_cost(accumulated_cost_file):
     if os.path.exists(accumulated_cost_file):
@@ -302,18 +251,18 @@ def print_log_cost(completion_json, gpt_version, current_stage, output_dir, tota
     output_lines.append("============================================\n")
 
     output_text = "\n".join(output_lines)
-    
+
     print(output_text)
 
     with open(f"{output_dir}/cost_info.log", "a", encoding="utf-8") as f:
         f.write(output_text + "\n")
-    
+
     return total_accumulated_cost
 
 
 def num_tokens_from_messages(messages, model="gpt-4o-2024-08-06"):
     import tiktoken
-    
+
     """Return the number of tokens used by a list of messages."""
     try:
         encoding = tiktoken.encoding_for_model(model)
@@ -352,9 +301,9 @@ def num_tokens_from_messages(messages, model="gpt-4o-2024-08-06"):
     for message in messages:
         num_tokens += tokens_per_message
         for key, value in message.items():
-            # num_tokens += len(encoding.encode(value) 
+            # num_tokens += len(encoding.encode(value)
             num_tokens += len(encoding.encode(value, allowed_special={"<|endoftext|>"},disallowed_special=()))
-            
+
             if key == "name":
                 num_tokens += tokens_per_name
     num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
@@ -362,17 +311,17 @@ def num_tokens_from_messages(messages, model="gpt-4o-2024-08-06"):
 
 
 
-def read_all_files(directory, allowed_ext, is_print=True): 
+def read_all_files(directory, allowed_ext, is_print=True):
     """Recursively read all .py files in the specified directory and return their contents."""
     all_files_content = {}
-    
+
     for root, _, files in os.walk(directory):  # Recursively traverse directories
         for filename in files:
             relative_path = os.path.relpath(os.path.join(root, filename), directory)  # Preserve directory structure
 
             # print(f"fn: {filename}\tdirectory: {directory}")
             _file_name, ext = os.path.splitext(filename)
-            
+
             is_skip = False
             if len(directory) < len(root):
                 root2 = root[len(directory)+1:]
@@ -380,14 +329,14 @@ def read_all_files(directory, allowed_ext, is_print=True):
                     if dirname.startswith("."):
                         is_skip = True
                         break
-            
+
             if filename.startswith(".") or "requirements.txt" in filename or ext == "" or is_skip:
                 if is_print and ext == "":
                     print(f"[SKIP] {os.path.join(root, filename)}")
                 continue
-                
+
             if ext not in allowed_ext:
-                if _file_name.lower() != "readme": 
+                if _file_name.lower() != "readme":
                     if is_print:
                         print(f"[SKIP] {os.path.join(root, filename)}")
                     continue
@@ -395,8 +344,8 @@ def read_all_files(directory, allowed_ext, is_print=True):
             try:
                 filepath = os.path.join(root, filename)
                 file_size = os.path.getsize(filepath) # bytes
-                
-                if file_size > 204800: # > 200KB 
+
+                if file_size > 204800: # > 200KB
                     print(f"[BIG] {filepath} {file_size}")
 
                 with open(filepath, "r") as file: # encoding="utf-8"
@@ -404,23 +353,23 @@ def read_all_files(directory, allowed_ext, is_print=True):
             except Exception as e:
                 print(e)
                 print(f"[SKIP] {os.path.join(root, filename)}")
-    
-    
+
+
     return all_files_content
 
 def read_python_files(directory):
     """Recursively read all .py files in the specified directory and return their contents."""
     python_files_content = {}
-    
+
     for root, _, files in os.walk(directory):  # Recursively traverse directories
         for filename in files:
             if filename.endswith(".py"):  # Check if file has .py extension
                 relative_path = os.path.relpath(os.path.join(root, filename), directory)  # Preserve directory structure
                 with open(os.path.join(root, filename), "r", encoding="utf-8") as file:
                     python_files_content[relative_path] = file.read()
-    
+
     return python_files_content
-  
+
 
 def extract_json_from_string(text):
     # Extract content inside ```yaml\n...\n```
@@ -440,3 +389,108 @@ def get_now_str():
     now = now.split(".")[0]
     now = now.replace("-","").replace(" ","_").replace(":","")
     return now # now - "20250427_205124"
+
+
+def save_input_variable(output_dir: str, var_name: str, var_value: any):
+    """
+    Save a single input variable as a JSON file.
+    """
+    json_filename = f"{output_dir}/{var_name}.json"
+    try:
+        with open(json_filename, "w", encoding="utf-8") as f:
+            json.dump(var_value, f, indent=4, default=str)
+        print(f"Saved {var_name} to {json_filename}")
+    except TypeError as e:
+        print(
+            f"Error loading {var_name} to JSON: {e}. Saving as string representation instead."
+        )
+        with open(json_filename, "w", encoding="utf-8") as f:
+            json.dump(str(var_value), f, indent=4)
+
+
+def save_artifacts(output_dir, trajectories, responses, todo_file_name=None, stage="planning"):
+    """Save final planning-stage outputs for reproducibility."""
+    if stage == "planning":
+        os.makedirs(output_dir, exist_ok=True)
+        with open(f"{output_dir}/planning_trajectories.json", "w") as f:
+            json.dump(trajectories, f, indent=2)
+        with open(f"{output_dir}/planning_response.json", "w") as f:
+            json.dump(responses, f, indent=2)
+        print(f"✅ Saved artifacts to {output_dir}")
+    elif stage == "analyzing":
+        os.makedirs(output_dir, exist_ok=True)
+        with open(f"{output_dir}/{todo_file_name}_simple_analysis_trajectories.json", "w") as f:
+            json.dump(trajectories, f, indent=2)
+        with open(f"{output_dir}/{todo_file_name}_simple_analysis_response.jsonn", "w") as f:
+            json.dump(responses, f, indent=2)
+        print(f"✅ Saved artifacts to {output_dir}")
+
+    
+
+def restore_artifacts_planning(output_dir, resume_stage_index):
+    """Restore trajectories and responses from previous planning stage."""
+    trajectories, responses = [], []
+    if resume_stage_index > 0:
+        try:
+            with open(f"{output_dir}/planning_trajectories.json", "r") as f:
+                trajectories = json.load(f)
+            with open(f"{output_dir}/planning_response.json", "r") as f:
+                responses = json.load(f)
+            print(f"✅ Restored context from stage {resume_stage_index - 1}")
+        except Exception as e:
+            print(f"⚠️ Could not restore artifacts: {e}")
+    return trajectories, responses
+
+def restore_artifacts_analyzing(output_dir, resume_stage_index):
+    """Restore trajectories and responses from previous planning stage."""
+    trajectories, responses = [], []
+    if resume_stage_index > 0:
+        try:
+            with open(f"{output_dir}/analyzing_trajectories.json", "r") as f:
+                trajectories = json.load(f)
+            with open(f"{output_dir}/analyzing_response.json", "r") as f:
+                responses = json.load(f)
+            print(f"✅ Restored context from stage {resume_stage_index - 1}")
+        except Exception as e:
+            print(f"⚠️ Could not restore artifacts: {e}")
+    return trajectories, responses
+
+def snapshot_to_kaggle(output_dir, dataset_slug=None, dataset_title=None, is_public=False):
+    """Create or update a Kaggle dataset from the output_dir."""
+    os.makedirs(output_dir, exist_ok=True)
+    default_name = os.path.basename(os.path.normpath(output_dir)).replace(" ", "_")
+    dataset_slug = dataset_slug or f"roger/{default_name.lower()}-planning"
+    dataset_title = dataset_title or f"{default_name} Planning Outputs"
+
+    metadata_path = os.path.join(output_dir, 'dataset-metadata.json')
+    metadata = {
+        "title": dataset_title,
+        "id": dataset_slug,
+        "licenses": [{"name": "CC0-1.0"}],
+        "isPrivate": not is_public
+    }
+
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    try:
+        subprocess.run(["kaggle", "datasets", "create", "-p", output_dir], check=True)
+        print(f"✅ Created Kaggle dataset: {dataset_slug}")
+    except subprocess.CalledProcessError:
+        subprocess.run(["kaggle", "datasets", "version", "-p", output_dir, "-m", "Updated planning outputs"], check=True)
+        print(f"🔁 Updated Kaggle dataset: {dataset_slug}")
+
+def load_from_kaggle(dataset_path, output_dir):
+    """Load planning artifacts from a Kaggle dataset path."""
+    try:
+        with open(f"{dataset_path}/planning_trajectories.json", "r") as f:
+            trajectories = json.load(f)
+            shutil.copy(f.name, output_dir)
+        with open(f"{dataset_path}/planning_response.json", "r") as f:
+            responses = json.load(f)
+            shutil.copy(f.name, output_dir)
+        print(f"✅ Loaded artifacts from Kaggle dataset: {dataset_path}")
+        return trajectories, responses
+    except Exception as e:
+        print(f"⚠️ Failed to load from Kaggle dataset: {e}")
+        return [], []

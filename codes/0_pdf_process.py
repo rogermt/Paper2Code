@@ -1,46 +1,86 @@
+import os
 import json
 import argparse
+from typing import Any, Dict, List
 
-def remove_spans(data):
-    # If data is a dictionary, recursively check its keys
-    if isinstance(data, dict):
-        # Remove specific keys if present
-        for key in ["cite_spans", "ref_spans", "eq_spans", "authors", "bib_entries", \
-                    "year", "venue", "identifiers", "_pdf_hash", "header"]:
-            data.pop(key, None)
-        # Recursively apply to child dictionaries or lists
-        for key, value in data.items():
-            data[key] = remove_spans(value)
-    # If data is a list, apply the function to each item
-    elif isinstance(data, list):
-        return [remove_spans(item) for item in data]
-    return data
+# -----------------------------------------------------------------
+# Helpers for "standard" S2 PDF JSON (remove *_spans + meta fields)
+# -----------------------------------------------------------------
+STANDARD_DROP_KEYS = {
+    "cite_spans", "ref_spans", "eq_spans",          # span lists
+    "authors", "bib_entries", "year", "venue",      # metadata
+    "identifiers", "_pdf_hash", "header",           # misc
+}
 
-def main(args):
-    input_json_path = args.input_json_path
-    output_json_path = args.output_json_path 
+def _clean_standard(obj: Any) -> Any:
+    """Recursively remove the keys above from vanilla S2 JSON."""
+    if isinstance(obj, dict):
+        # drop keys in-place
+        for k in STANDARD_DROP_KEYS:
+            obj.pop(k, None)
+        # recurse
+        return {k: _clean_standard(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clean_standard(x) for x in obj]
+    return obj
 
-    with open(f'{input_json_path}') as f:
+
+# -----------------------------------------------------------------
+# Helpers for "dolphin-ocr" JSON  (keep only label / text / page_no)
+# -----------------------------------------------------------------
+def _dolphin_keep_element(el: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: el[k] for k in ("label", "text") if k in el}
+
+def _clean_dolphin(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip bbox, reading_order, etc. – keep only minimal fields."""
+    if "pages" in data:                 # multi-page
+        pages = []
+        for pg in data["pages"]:
+            cleaned_pg = {
+                "elements": [_dolphin_keep_element(e) for e in pg.get("elements", [])]
+            }
+            if "page_number" in pg:
+                cleaned_pg["page_number"] = pg["page_number"]
+            pages.append(cleaned_pg)
+        return {"pages": pages}
+    else:                               # flat list
+        return {
+            "elements": [_dolphin_keep_element(e) for e in data.get("elements", [])]
+        }
+
+
+# -----------------------------------------------------------------
+# Main driver
+# -----------------------------------------------------------------
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input_json_path", required=True)
+    parser.add_argument("--output_json_path", required=True)
+    parser.add_argument(
+        "--input_json_type",
+        default="standard",
+        choices=["standard", "dolphin-ocr"],
+        help="Format of the input JSON file",
+    )
+    args = parser.parse_args()
+
+    # 1. read
+    with open(args.input_json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    cleaned_data = remove_spans(data)
+    # 2. clean
+    if args.input_json_type == "standard":
+        cleaned = _clean_standard(data)
+    else:  # dolphin-ocr
+        cleaned = _clean_dolphin(data)
 
-    print(f"[SAVED] {output_json_path}")
-    with open(output_json_path, 'w') as f:
-        json.dump(cleaned_data, f)
+    # 3. write
+    os.makedirs(os.path.dirname(args.output_json_path), exist_ok=True)
+    with open(args.output_json_path, "w", encoding="utf-8") as f:
+        json.dump(cleaned, f, indent=2, ensure_ascii=False)
 
+    print(f"[SAVED] {args.output_json_path}")
 
+# -----------------------------------------------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input_json_path", type=str)
-    parser.add_argument("--output_json_path", type=str)
-
-    
-    args = parser.parse_args()
-    main(args)
-
-# run
-# cd ./s2orc-doc2json/grobid-0.7.3
-# ./gradlew run
-
-# python doc2json/grobid2json/process_pdf.py -i tests/pdf/transformer.pdf -t temp_dir/ -o output_dir/
+    main()
